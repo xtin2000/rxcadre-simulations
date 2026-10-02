@@ -45,7 +45,12 @@ RxCADRE small-plot (S3–S9) ranges:
 | Fuel depth | 0.30–0.44 m (calibrated depth scaled by each plot's grass height) |
 | Fuel patchiness | spatially correlated, 0–35 % strength, 8–40 m patch size |
 | Ignition | point or walked drip-torch line, upwind of centre |
-| Firebreak | 6 m bare road across the wind in ~30 % of scenarios |
+| Firebreak | 6 m bare road across the wind in about a third of scenarios |
+
+Burned area ranges from 2.2 to 16 ha (median 12 ha); 90 of 100 fires reach the domain
+edge within the hour.
+
+![Twelve scenarios spanning the range of burned area](docs/scenario_overview.png)
 
 ## Installation
 
@@ -81,9 +86,10 @@ scripts/calibrate_s5.sh
 .venv/bin/python -m rxcadre_sim.scenarios --count 100
 scripts/run_fds_batch.sh scenarios 14
 
-# 5. Export ground-truth grids for the drone simulation
+# 5. Export ground-truth grids for the drone simulation, and plot an overview
 .venv/bin/python -m rxcadre_sim.scenario_export scenarios/scn* \
     --out-dir ../drone_lab/wildfire_spread_prediction/data/fds_scenarios
+.venv/bin/python -m rxcadre_sim.scenario_overview ../drone_lab/wildfire_spread_prediction/data/fds_scenarios
 ```
 
 Each exported `scnNNN.npz` holds fire arrival time, spread velocity, fuel load,
@@ -99,7 +105,7 @@ fuel depth and moisture per cell, plus the wind time series and the scenario spe
 ## Project layout
 
 ```
-rxcadre_sim/   download, S5 data preparation, S5 case/compare/map, scenario generation/export
+rxcadre_sim/   download, S5 data prep, S5 case/compare/map, scenario generation/export/overview
 scripts/       FDS batch runner and calibration sweep
 data/derived/  small S5 inputs and validation targets (tracked); data/raw/ is downloaded
 runs/          S5 base and calibration cases (inputs tracked, FDS outputs ignored)
