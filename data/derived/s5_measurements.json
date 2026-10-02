@@ -1,0 +1,23 @@
+{
+  "spread": {
+    "ros_m_s": 0.12346105757918105,
+    "spread_heading_deg": 117.2364863488088,
+    "ignition_estimate_utc_s": 65215.49707039406,
+    "first_arrival_utc_s": 65457.9,
+    "last_arrival_utc_s": 65828.3
+  },
+  "wind_during_burn": {
+    "mean_speed_m_s": 2.808961576214648,
+    "gust_p95_m_s": 4.448048,
+    "vector_mean_from_deg": 335.4264211564539,
+    "steadiness": 0.6633964623582264,
+    "samples": 5516
+  },
+  "wind_before_burn": {
+    "mean_speed_m_s": 2.668844529185185,
+    "gust_p95_m_s": 4.448048,
+    "vector_mean_from_deg": 339.9911191799179,
+    "steadiness": 0.6528298099786128,
+    "samples": 16200
+  }
+}

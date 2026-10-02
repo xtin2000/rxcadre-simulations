@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Raw downloads: re-fetch with `python -m rxcadre_sim.download`
+data/raw/
+# Large derived file: rebuilt by `python -m rxcadre_sim.prepare_s5`
+data/derived/s5_anemometers.csv
+
+# FDS outputs (re-create by running the inputs); keep inputs, specs and figures
+runs/*/*
+!runs/*/*.fds
+scenarios/*/*
+!scenarios/*/*.fds
+!scenarios/*/spec.json
+scenarios/batch.log

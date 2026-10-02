@@ -1,0 +1,85 @@
+"""Download the public RxCADRE 2012 datasets this project uses into data/raw/.
+
+All come from the USDA Forest Service Research Data Archive. Only the S5
+files are pulled out of the 1.5 GB fire-behavior archive (range requests).
+"""
+
+from __future__ import annotations
+
+import argparse
+from dataclasses import dataclass
+
+from rxcadre_sim.paths import RAW_DIR
+from rxcadre_sim.remote_zip import extract_members
+
+ARCHIVE = "https://www.fs.usda.gov/rds/archive/products"
+
+
+@dataclass(frozen=True)
+class Dataset:
+    """One archive (or the needed slice of it) and where it lands under data/raw/."""
+
+    name: str
+    url: str
+    patterns: tuple[str, ...]
+    strip_prefix: str
+    citation: str
+
+
+DATASETS = (
+    Dataset(
+        name="fuels",
+        url=f"{ARCHIVE}/RDS-2014-0028/RDS-2014-0028_Data.zip",
+        patterns=("Data/",),
+        strip_prefix="Data/",
+        citation="Ottmar & Restaino 2014, https://doi.org/10.2737/RDS-2014-0028",
+    ),
+    Dataset(
+        name="fire_behavior",
+        url=f"{ARCHIVE}/RDS-2016-0038/RDS-2016-0038_Data_1_of_3.zip",
+        patterns=("FireBehavior/s5/", "Anemometer_Final_v2_only_Splots.csv"),
+        strip_prefix="Data/",
+        citation="Jimenez & Butler 2016, https://doi.org/10.2737/RDS-2016-0038",
+    ),
+    Dataset(
+        name="supplements",
+        url=f"{ARCHIVE}/RDS-2016-0038/RDS-2016-0038_Supplements.zip",
+        patterns=("Supplements/",),
+        strip_prefix="Supplements/",
+        citation="Jimenez & Butler 2016, https://doi.org/10.2737/RDS-2016-0038",
+    ),
+    Dataset(
+        name="survey",
+        url=f"{ARCHIVE}/RDS-2016-0014/RDS-2016-0014.zip",
+        patterns=("Data/",),
+        strip_prefix="Data/",
+        citation="RxCADRE 2012 instrument survey locations, https://doi.org/10.2737/RDS-2016-0014",
+    ),
+    Dataset(
+        name="burn_blocks",
+        url=f"{ARCHIVE}/RDS-2014-0031/RDS-2014-0031.zip",
+        patterns=("Data/",),
+        strip_prefix="Data/",
+        citation="RxCADRE 2008-2012 burn blocks, https://doi.org/10.2737/RDS-2014-0031",
+    ),
+)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--only", choices=[d.name for d in DATASETS], nargs="*")
+    args = parser.parse_args()
+    for dataset in DATASETS:
+        if args.only and dataset.name not in args.only:
+            continue
+        written = extract_members(
+            dataset.url,
+            list(dataset.patterns),
+            RAW_DIR / dataset.name,
+            strip_prefix=dataset.strip_prefix,
+        )
+        print(f"{dataset.name}: {len(written)} files ({dataset.citation})")
+
+
+if __name__ == "__main__":
+    main()

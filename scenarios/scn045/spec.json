@@ -1,0 +1,18 @@
+{
+  "scenario_id": "scn045",
+  "seed": 2071,
+  "wind_speed_m_s": 2.37,
+  "wind_from_deg": 12.2,
+  "wind_shift_deg": 30.6,
+  "wind_shift_start_s": 586.0,
+  "gust_amplitude": 0.12,
+  "dead_moisture": 0.093,
+  "fuel_load_kg_m2": 0.284,
+  "mean_fuel_depth_m": 0.366,
+  "patch_strength": 0.003,
+  "patch_length_m": 27.2,
+  "has_firebreak": true,
+  "ignition_kind": "line",
+  "ignition_x_m": 227.4,
+  "ignition_y_m": 298.3
+}
