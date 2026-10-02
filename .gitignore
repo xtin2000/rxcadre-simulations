@@ -21,3 +21,8 @@ scenarios/batch.log
 
 # Spread-rate table runs (regenerate with `python -m rxcadre_sim.ros_table write`)
 ros_table/
+
+# Burn-scenario inputs (regenerable from seed) and the exported training dataset (too big for git)
+burn_scenarios/
+burn_dataset/
+burn_pilot*/
