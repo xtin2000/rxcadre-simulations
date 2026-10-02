@@ -26,3 +26,4 @@ ros_table/
 burn_scenarios/
 burn_dataset/
 burn_pilot*/
+burn_dataset_batch.log
