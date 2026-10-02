@@ -47,3 +47,10 @@ def test_every_burnable_cell_gets_exactly_one_vent(spec):
         x0, x1 = (float(v) for v in line.split("XB=")[1].split(",")[:2])
         covered += round((x1 - x0) / 8.0)
     assert covered == int((fuel_depth_field(spec) > 0).sum())
+
+
+def test_every_scenario_lights_at_least_one_cell():
+    """A point that lands on bare ground must still light the nearest burnable cell."""
+    for index in range(300):
+        spec = sample_burn(index, base_seed=7000)
+        assert np.isfinite(ignition_times(spec)).any(), spec.scenario_id

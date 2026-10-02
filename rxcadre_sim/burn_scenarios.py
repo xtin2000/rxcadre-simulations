@@ -142,7 +142,12 @@ def fuel_depth_field(spec: BurnSpec) -> np.ndarray:
     multiplier = np.clip(1.0 + spec.patch_strength * noise, 0.3, 2.0)
     edges = np.quantile(multiplier, np.linspace(0, 1, FUEL_DEPTH_CLASSES + 1)[1:-1])
     classes = np.digitize(multiplier, edges)
-    class_means = np.array([multiplier[classes == k].mean() for k in range(FUEL_DEPTH_CLASSES)])
+    class_means = np.array(
+        [
+            multiplier[classes == k].mean() if (classes == k).any() else 1.0
+            for k in range(FUEL_DEPTH_CLASSES)
+        ]
+    )
     depth = spec.fuel_depth_m * class_means[classes]
 
     holes = gaussian_filter(rng.normal(size=(GRID_CELLS, GRID_CELLS)), 2.0)
@@ -173,8 +178,13 @@ def ignition_times(spec: BurnSpec) -> np.ndarray:
 
     if spec.ignition_kind == "point":
         start = centre - downwind * rng.uniform(100.0, 300.0)
-        nearest = np.hypot(xx - start[0], yy - start[1]) < CELL_SIZE_M * 1.5
-        lit[nearest & inside] = 0.0
+        distance = np.hypot(xx - start[0], yy - start[1])
+        nearest = (distance < CELL_SIZE_M * 1.5) & inside
+        if not nearest.any() and inside.any():
+            # The target spot is bare or outside the block: light the closest burnable cell.
+            nearest = distance == distance[inside].min()
+            nearest &= inside
+        lit[nearest] = 0.0
         return lit
 
     strip_normal_angle = toward + np.radians(spec.strip_angle_offset_deg)
