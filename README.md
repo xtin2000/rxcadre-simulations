@@ -52,6 +52,15 @@ edge within the hour.
 
 ![Twelve scenarios spanning the range of burned area](docs/scenario_overview.png)
 
+**Head-fire spread-rate table** (`data/derived/fds_head_ros_table.npz`): FDS's
+head-fire rate of spread from 1,134 controlled runs (uniform fuel, steady wind,
+planar front) over wind 0–7.5 m/s × dead moisture 6–10 % × fuel depth 0.12–0.8 m ×
+fuel load 0.1–0.75 kg/m². It is the "true" spread-rate field in the drone
+simulation's replay mode and the target its estimator is fitted to. It reproduces
+the calibrated S5 run to within 5 % (0.126 vs 0.120 m/s). In FDS's Rothermel
+model, spread depends strongly on fuel depth (12× over the range) but barely on
+load at fixed depth (±5 %).
+
 ## Installation
 
 Requires macOS or Linux, Python 3.12+, and FDS 6.11 (installed from the
@@ -86,7 +95,12 @@ scripts/calibrate_s5.sh
 .venv/bin/python -m rxcadre_sim.scenarios --count 100
 scripts/run_fds_batch.sh scenarios 14
 
-# 5. Export ground-truth grids for the drone simulation, and plot an overview
+# 5. Tabulate FDS head-fire spread rates (1,134 runs, ~3 min)
+.venv/bin/python -m rxcadre_sim.ros_table write
+scripts/run_fds_batch.sh ros_table 14
+.venv/bin/python -m rxcadre_sim.ros_table collect --out data/derived/fds_head_ros_table.npz
+
+# 6. Export ground-truth grids for the drone simulation, and plot an overview
 .venv/bin/python -m rxcadre_sim.scenario_export scenarios/scn* \
     --out-dir ../drone_lab/wildfire_spread_prediction/data/fds_scenarios
 .venv/bin/python -m rxcadre_sim.scenario_overview ../drone_lab/wildfire_spread_prediction/data/fds_scenarios
@@ -123,6 +137,9 @@ docs/          figures
 - **Moisture capped at 10 %:** fuel model 1 has a 12 % dead-fuel moisture of
   extinction. Plot S7 (13 % litter moisture) burned in reality, but would not in
   this model.
+- **FDS arrival-time devices:** `FIRE ARRIVAL TIME` devices that are only written at the
+  end of a run report meaningless times; written every 10 s (as in the S5 case) they
+  agree with the level-set slice to within ~10 s. The table tracks the front from the slice.
 - **Fires reach the edge:** most scenarios reach the 400 m domain edge within
   20–40 min, which limits long forecast horizons.
 

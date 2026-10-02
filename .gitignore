@@ -18,3 +18,6 @@ scenarios/*/*
 !scenarios/*/*.fds
 !scenarios/*/spec.json
 scenarios/batch.log
+
+# Spread-rate table runs (regenerate with `python -m rxcadre_sim.ros_table write`)
+ros_table/
