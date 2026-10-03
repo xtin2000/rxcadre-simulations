@@ -61,6 +61,21 @@ the calibrated S5 run to within 5 % (0.126 vs 0.120 m/s). In FDS's Rothermel
 model, spread depends strongly on fuel depth (12× over the range) but barely on
 load at fixed depth (±5 %).
 
+**Real test burns** (`real_burns/L1G.npz`, `L2G.npz`, `L2F.npz`): the three large 2012 burns
+in the training-data layout (8 m cells, seconds after first ignition). Arrival times come from
+the airborne heat camera (first pass above 1,000 W/m²); ignition times from the drip-torch ATV
+GPS tracks; fuel, moisture and wind are the measured block averages. Grass fronts often cross
+a pixel between two passes, so gaps within 24 m of a detection are filled and flagged
+(`arrival_observed`). Recorded lighting explains all but 0–2% of each burn.
+
+| Burn | Grid | Seen hot | Gap-filled | Unknown | Passes | Mean wind |
+|---|---|---|---|---|---|---|
+| L1G (grass) | 414 × 353 | 60% | 35% | 5% | 28 over 95 min | 3.5 m/s |
+| L2G (grass) | 229 × 245 | 88% | 11% | 1% | 20 over 56 min | 2.3 m/s |
+| L2F (pine forest) | 233 × 236 | 88% | 8% | 3% | 51 over 189 min | 1.9 m/s |
+
+![Real test burns and data quality](docs/real_burn_test_maps.png)
+
 ## Installation
 
 Requires macOS or Linux, Python 3.12+, and FDS 6.11 (installed from the
@@ -100,7 +115,10 @@ scripts/run_fds_batch.sh scenarios 14
 scripts/run_fds_batch.sh ros_table 14
 .venv/bin/python -m rxcadre_sim.ros_table collect --out data/derived/fds_head_ros_table.npz
 
-# 6. Export ground-truth grids for the drone simulation, and plot an overview
+# 6. Build the real test burns (L1G, L2G, L2F)
+.venv/bin/python -m rxcadre_sim.real_burns
+
+# 7. Export ground-truth grids for the drone simulation, and plot an overview
 .venv/bin/python -m rxcadre_sim.scenario_export scenarios/scn* \
     --out-dir ../drone_lab/wildfire_spread_prediction/data/fds_scenarios
 .venv/bin/python -m rxcadre_sim.scenario_overview ../drone_lab/wildfire_spread_prediction/data/fds_scenarios
