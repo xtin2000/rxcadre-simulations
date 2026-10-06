@@ -1,0 +1,25 @@
+{
+  "inputs": {
+    "seed": 1199,
+    "ignition_x_m": 294.9,
+    "ignition_y_m": 180.8,
+    "wind_from_deg": 199.2
+  },
+  "predicted": {
+    "no_wind_m_s": 0.02423,
+    "wind_reduction": 0.3768883221215873,
+    "flame_wind_m_s": 1.0552873019404443,
+    "wind_boost": 4.225906805576262,
+    "head_m_s": 0.12662372189911283,
+    "back_m_s": 0.03423179094567038,
+    "flank_m_s": 0.05389379201439923,
+    "widest_half_width_m_s": 0.06583735092493573,
+    "centre_drift_m_s": 0.04619596547672123,
+    "length_to_breadth": 1.2216128883145845
+  },
+  "measured": {
+    "head_m_s": 0.12655552796139868,
+    "back_m_s": 0.03407419966374163,
+    "flank_m_s": 0.05387146878423036
+  }
+}

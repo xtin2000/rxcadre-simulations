@@ -1,0 +1,41 @@
+Demo run: one random ignition point on uniform grass (seed 1199).
+FDS only reads lines that start with an ampersand, so all other lines are comments.
+
+&HEAD CHID='demo_seed1199', TITLE='Random ignition demo' /
+
+Area: 400 m x 400 m, squares of 2 m (200 x 200).
+x = metres east, y = metres north.
+&MESH IJK=200,200,1, XB=0,400,0,400,0,6 /
+
+Simulate 30 minutes, fire-front (level-set) mode only.
+&TIME T_END=1800 /
+&MISC LEVEL_SET_MODE=1 /
+&RADI RADIATION=F /
+
+Wind: 2.8 m/s blowing FROM 199.2 degrees (0 = north, 90 = east).
+&WIND SPEED=2.8, DIRECTION=199.2 /
+
+Open sides and top; save the fire edge every 10 s.
+&VENT MB='XMIN', SURF_ID='OPEN' /
+&VENT MB='XMAX', SURF_ID='OPEN' /
+&VENT MB='YMIN', SURF_ID='OPEN' /
+&VENT MB='YMAX', SURF_ID='OPEN' /
+&VENT MB='ZMAX', SURF_ID='OPEN' /
+&DUMP DT_SLCF=10 /
+
+Fuel everywhere: short grass (type 1) with the S5 values: 0.282 kg/m2, 0.37 m deep, 8.6% moisture.
+Ignition: the 2 m square containing the random point
+(294.9, 180.8), lit at t = 0.
+FDS rejects a fuel patch that overlaps another,
+so the grass is laid in four pieces around the lit square.
+&SURF ID='GRASS', VEG_LSET_FUEL_INDEX=1, VEG_LSET_SURF_LOAD=0.282, VEG_LSET_HT=0.37, VEG_LSET_M1=0.086 /
+&SURF ID='LIT', VEG_LSET_FUEL_INDEX=1, VEG_LSET_SURF_LOAD=0.282, VEG_LSET_HT=0.37, VEG_LSET_M1=0.086, VEG_LSET_IGNITE_TIME=0 /
+&VENT XB=294,296,180,182,0,0, SURF_ID='LIT' /
+&VENT XB=0,400,0,180,0,0, SURF_ID='GRASS' /
+&VENT XB=0,400,182,400,0,0, SURF_ID='GRASS' /
+&VENT XB=0,294,180,182,0,0, SURF_ID='GRASS' /
+&VENT XB=296,400,180,182,0,0, SURF_ID='GRASS' /
+
+Output: where the fire edge is (level-set value > 0 = burned).
+&SLCF AGL_SLICE=1, QUANTITY='LEVEL SET VALUE' /
+&TAIL /
