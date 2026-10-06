@@ -62,25 +62,28 @@ def dead_fuel_moisture() -> MeasuredValue:
 
 def wind() -> tuple[MeasuredValue, MeasuredValue]:
     path = DERIVED_DIR / "s5_measurements.json"
-    burn = json.loads(path.read_text())["wind_during_burn"]
+    measurements = json.loads(path.read_text())
+    burn = measurements["wind_during_burn"]
+    excluded = ", ".join(measurements["misaligned_anemometers"])
     origin = (
         "computed by prepare_s5.py from Anemometer/Anemometer_Final_v2_only_Splots.csv, "
         f"rows with PlotID S5 during the burn ({burn['samples']} one-second readings, "
-        "9 anemometers, 3.05 m above ground)"
+        "3.05 m above ground)"
     )
     speed = MeasuredValue(
         "wind speed",
         round(burn["mean_speed_m_s"], 1),
         "m/s",
         "RDS-2016-0038",
-        f"mean speed {burn['mean_speed_m_s']:.3f} m/s, {origin}",
+        f"mean speed {burn['mean_speed_m_s']:.3f} m/s from all 9 anemometers, {origin}",
     )
     direction = MeasuredValue(
         "wind direction (from)",
         float(round(burn["vector_mean_from_deg"])),
         "degrees",
         "RDS-2016-0038",
-        f"vector-mean direction {burn['vector_mean_from_deg']:.1f}°, {origin}",
+        f"vector-mean direction {burn['vector_mean_from_deg']:.1f}° from the anemometers "
+        f"that agree (misaligned {excluded} left out), {origin}",
     )
     return speed, direction
 
