@@ -17,7 +17,7 @@ import pandas as pd
 from rxcadre_sim.s5_case import (
     DOMAIN_X_M,
     DOMAIN_Y_M,
-    IGNITION_CENTER_UTM,
+    ignition_centre_utm,
     load_perimeter_local,
     load_sensors_local,
 )
@@ -46,15 +46,15 @@ def save_grid(run_dir: Path, x: np.ndarray, y: np.ndarray, arrival: np.ndarray) 
         x_m=x,
         y_m=y,
         arrival_s=arrival,
-        origin_utm16n=np.array(IGNITION_CENTER_UTM),
+        origin_utm16n=np.array(ignition_centre_utm()),
     )
     xx, yy = np.meshgrid(x, y)
     pd.DataFrame(
         {
             "x_m": xx.ravel(),
             "y_m": yy.ravel(),
-            "easting": xx.ravel() + IGNITION_CENTER_UTM[0],
-            "northing": yy.ravel() + IGNITION_CENTER_UTM[1],
+            "easting": xx.ravel() + ignition_centre_utm()[0],
+            "northing": yy.ravel() + ignition_centre_utm()[1],
             "arrival_s": arrival.ravel(),
         }
     ).dropna().to_csv(run_dir / "arrival_time.csv", index=False)

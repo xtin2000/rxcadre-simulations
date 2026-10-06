@@ -5,54 +5,78 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from matplotlib.path import Path as PolygonPath
 
+from rxcadre_sim import s5_inputs
 from rxcadre_sim.paths import DERIVED_DIR, RUNS_DIR
 
-# Surveyed S5 ignition-line centre (survey tag 396, UTM 16N); local coordinates are relative to it.
-IGNITION_CENTER_UTM = (524681.26, 3379075.60)
-IGNITION_HALF_LENGTH_M = 24.8
+# Reported in RxCADRE field documentation (two igniters walking outward from the line centre).
 IGNITER_WALK_SPEED_M_S = 1.34
+# The one tuned input: makes the simulated spread match the S5 sensors (calibrate_s5.sh).
+TUNED_FUEL_DEPTH_M = 0.37
 
 DOMAIN_X_M = (-80.0, 140.0)
 DOMAIN_Y_M = (-180.0, 60.0)
 DOMAIN_TOP_M = 6.0
 
 
+@cache
+def ignition_centre_utm() -> tuple[float, float]:
+    """Surveyed S5 ignition-line centre (UTM 16N); local x, y are metres from this point."""
+    easting, northing, _ = s5_inputs.ignition_line()
+    return easting.value, northing.value
+
+
 @dataclass
 class S5Scenario:
-    """Inputs for one S5-style level-set run; defaults are the measured RxCADRE values."""
+    """Inputs for one S5-style level-set run. Use ``from_rxcadre`` to fill the measured values."""
 
-    chid: str = "s5_base"
-    wind_speed_m_s: float = 2.8
-    wind_from_deg: float = 335.0
+    chid: str
+    wind_speed_m_s: float
+    wind_from_deg: float
+    fuel_load_kg_m2: float
+    dead_moisture: float
+    ignition_half_length_m: float
     fuel_index: int = 1
-    fuel_load_kg_m2: float = 0.282
-    fuel_height_m: float = 0.37
-    dead_moisture: float = 0.086
+    fuel_height_m: float = TUNED_FUEL_DEPTH_M
     wind_height_m: float | None = None
     cell_size_m: float = 2.0
     end_time_s: float = 2400.0
     ignition_xy_m: tuple[float, float] = (0.0, 0.0)
-    ignition_half_length_m: float = IGNITION_HALF_LENGTH_M
     extra_surf_params: dict[str, float] = field(default_factory=dict)
+
+    @classmethod
+    def from_rxcadre(cls, chid: str = "s5_base", **overrides: object) -> S5Scenario:
+        """Measured S5 values read from the RxCADRE files (see s5_inputs), then any overrides."""
+        speed, direction = s5_inputs.wind()
+        _, _, half_length = s5_inputs.ignition_line()
+        measured = {
+            "wind_speed_m_s": speed.value,
+            "wind_from_deg": direction.value,
+            "fuel_load_kg_m2": s5_inputs.fuel_load().value,
+            "dead_moisture": s5_inputs.dead_fuel_moisture().value,
+            "ignition_half_length_m": half_length.value,
+        }
+        return cls(chid=chid, **{**measured, **overrides})
 
 
 def load_perimeter_local() -> np.ndarray:
     """S5 burn-block polygon in metres relative to the ignition-line centre (x east, y north)."""
     points = np.array(json.loads((DERIVED_DIR / "s5_perimeter_xy.json").read_text()))
-    return points - np.array(IGNITION_CENTER_UTM)
+    return points - np.array(ignition_centre_utm())
 
 
 def load_sensors_local() -> pd.DataFrame:
     sensors = pd.read_csv(DERIVED_DIR / "s5_fire_sensors_located.csv")
     sensors = sensors[sensors.is_valid].copy()
-    sensors["x_local"] = sensors.x - IGNITION_CENTER_UTM[0]
-    sensors["y_local"] = sensors.y - IGNITION_CENTER_UTM[1]
+    centre_x, centre_y = ignition_centre_utm()
+    sensors["x_local"] = sensors.x - centre_x
+    sensors["y_local"] = sensors.y - centre_y
     return sensors
 
 
@@ -185,20 +209,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out-dir", type=Path, default=RUNS_DIR)
     parser.add_argument("--chid", default="s5_base")
-    parser.add_argument("--wind-speed", type=float, default=2.8)
-    parser.add_argument("--wind-from", type=float, default=335.0)
-    parser.add_argument("--fuel-height", type=float, default=0.37)
+    parser.add_argument("--wind-speed", type=float, help="override the measured wind speed")
+    parser.add_argument("--wind-from", type=float, help="override the measured wind direction")
+    parser.add_argument("--fuel-height", type=float, default=TUNED_FUEL_DEPTH_M)
     parser.add_argument("--wind-height", type=float, default=None)
     parser.add_argument("--end-time", type=float, default=2400.0)
     args = parser.parse_args()
 
-    scenario = S5Scenario(
-        chid=args.chid,
-        wind_speed_m_s=args.wind_speed,
-        wind_from_deg=args.wind_from,
-        fuel_height_m=args.fuel_height,
-        wind_height_m=args.wind_height,
-        end_time_s=args.end_time,
+    overrides = {
+        "wind_speed_m_s": args.wind_speed,
+        "wind_from_deg": args.wind_from,
+        "fuel_height_m": args.fuel_height,
+        "wind_height_m": args.wind_height,
+        "end_time_s": args.end_time,
+    }
+    scenario = S5Scenario.from_rxcadre(
+        args.chid, **{key: value for key, value in overrides.items() if value is not None}
     )
     case_dir = args.out_dir / scenario.chid
     case_dir.mkdir(parents=True, exist_ok=True)

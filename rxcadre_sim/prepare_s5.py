@@ -18,7 +18,7 @@ import pandas as pd
 import shapefile
 
 from rxcadre_sim.paths import DERIVED_DIR, RAW_DIR
-from rxcadre_sim.s5_case import IGNITION_CENTER_UTM
+from rxcadre_sim.s5_case import ignition_centre_utm
 
 MPH_TO_M_S = 0.44704
 WIND_WINDOW_BEFORE_S = 1800.0
@@ -108,7 +108,7 @@ def measured_spread(sensors: pd.DataFrame) -> dict[str, float]:
     valid = sensors[sensors.is_valid]
     arrival_s = pd.to_timedelta(valid.arrival_utc).dt.total_seconds().to_numpy()
     design = np.c_[
-        np.ones(len(valid)), valid.x - IGNITION_CENTER_UTM[0], valid.y - IGNITION_CENTER_UTM[1]
+        np.ones(len(valid)), valid.x - ignition_centre_utm()[0], valid.y - ignition_centre_utm()[1]
     ]
     coefficients, *_ = np.linalg.lstsq(design, arrival_s, rcond=None)
     return {
