@@ -85,6 +85,18 @@ def wind() -> tuple[MeasuredValue, MeasuredValue]:
     return speed, direction
 
 
+def wind_series() -> tuple[list[float], list[float], list[float], str]:
+    """Minute-by-minute wind after ignition: (seconds, speed m/s, from-direction deg, source)."""
+    measurements = json.loads((DERIVED_DIR / "s5_measurements.json").read_text())
+    series = measurements["wind_series_after_ignition"]
+    excluded = ", ".join(measurements["misaligned_anemometers"])
+    source = (
+        "RDS-2016-0038, computed by prepare_s5.py: 1-minute means of the S5 anemometers; "
+        f"speed from all 9, direction without the misaligned {excluded}"
+    )
+    return series["times_s"], series["speed_m_s"], series["from_deg"], source
+
+
 def ignition_line() -> tuple[MeasuredValue, MeasuredValue, MeasuredValue]:
     path = RAW_DIR / "survey/SurveyPointInformation.shp"
     reader = shapefile.Reader(str(path), encoding="latin-1")

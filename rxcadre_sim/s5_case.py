@@ -18,7 +18,7 @@ from rxcadre_sim.paths import DERIVED_DIR, RUNS_DIR
 # Reported in RxCADRE field documentation (two igniters walking outward from the line centre).
 IGNITER_WALK_SPEED_M_S = 1.34
 # The one tuned input: makes the simulated spread match the S5 sensors (calibrate_s5.sh).
-TUNED_FUEL_DEPTH_M = 0.37
+TUNED_FUEL_DEPTH_M = 0.42
 
 DOMAIN_X_M = (-80.0, 140.0)
 DOMAIN_Y_M = (-180.0, 60.0)
@@ -49,15 +49,23 @@ class S5Scenario:
     end_time_s: float = 2400.0
     ignition_xy_m: tuple[float, float] = (0.0, 0.0)
     extra_surf_params: dict[str, float] = field(default_factory=dict)
+    # Minute-by-minute measured wind; empty means a steady wind at the mean speed and direction.
+    wind_times_s: tuple[float, ...] = ()
+    wind_speeds_m_s: tuple[float, ...] = ()
+    wind_from_degs: tuple[float, ...] = ()
 
     @classmethod
     def from_rxcadre(cls, chid: str = "s5_base", **overrides: object) -> S5Scenario:
         """Measured S5 values read from the RxCADRE files (see s5_inputs), then any overrides."""
         speed, direction = s5_inputs.wind()
         _, _, half_length = s5_inputs.ignition_line()
+        times, speeds, directions, _ = s5_inputs.wind_series()
         measured = {
             "wind_speed_m_s": speed.value,
             "wind_from_deg": direction.value,
+            "wind_times_s": tuple(times),
+            "wind_speeds_m_s": tuple(speeds),
+            "wind_from_degs": tuple(directions),
             "fuel_load_kg_m2": s5_inputs.fuel_load().value,
             "dead_moisture": s5_inputs.dead_fuel_moisture().value,
             "ignition_half_length_m": half_length.value,
@@ -170,6 +178,23 @@ def _sensor_devices(sensors: pd.DataFrame) -> list[str]:
     ]
 
 
+def _wind_lines(scenario: S5Scenario) -> list[str]:
+    """Steady wind, or the measured 1-minute series as FDS ramps (speed as a multiple of SPEED)."""
+    if not scenario.wind_times_s:
+        return [f"&WIND DIRECTION={scenario.wind_from_deg}, SPEED={scenario.wind_speed_m_s} /"]
+    lines = [
+        f"&WIND DIRECTION={scenario.wind_from_deg}, SPEED={scenario.wind_speed_m_s}, "
+        "RAMP_SPEED_T='wind speed', RAMP_DIRECTION_T='wind dir' /"
+    ]
+    for time, speed in zip(scenario.wind_times_s, scenario.wind_speeds_m_s, strict=True):
+        lines.append(
+            f"&RAMP ID='wind speed', T={time:g}, F={speed / scenario.wind_speed_m_s:.3f} /"
+        )
+    for time, direction in zip(scenario.wind_times_s, scenario.wind_from_degs, strict=True):
+        lines.append(f"&RAMP ID='wind dir', T={time:g}, F={direction:.1f} /")
+    return lines
+
+
 def build_input(scenario: S5Scenario) -> str:
     """Return the full FDS input text for a scenario."""
     cell = scenario.cell_size_m
@@ -184,7 +209,7 @@ def build_input(scenario: S5Scenario) -> str:
         f"&TIME T_END={scenario.end_time_s} /",
         "&MISC LEVEL_SET_MODE=1 /",
         "&RADI RADIATION=F /",
-        f"&WIND DIRECTION={scenario.wind_from_deg}, SPEED={scenario.wind_speed_m_s} /",
+        *_wind_lines(scenario),
         "&DUMP DT_BNDF=10., DT_DEVC=10. /",
         *[
             f"&VENT MB='{side}', SURF_ID='OPEN' /"
@@ -214,6 +239,11 @@ def main() -> None:
     parser.add_argument("--fuel-height", type=float, default=TUNED_FUEL_DEPTH_M)
     parser.add_argument("--wind-height", type=float, default=None)
     parser.add_argument("--end-time", type=float, default=2400.0)
+    parser.add_argument(
+        "--steady-wind",
+        action="store_true",
+        help="one constant wind instead of the 1-minute series",
+    )
     args = parser.parse_args()
 
     overrides = {
@@ -223,6 +253,8 @@ def main() -> None:
         "wind_height_m": args.wind_height,
         "end_time_s": args.end_time,
     }
+    if args.steady_wind:
+        overrides.update(wind_times_s=(), wind_speeds_m_s=(), wind_from_degs=())
     scenario = S5Scenario.from_rxcadre(
         args.chid, **{key: value for key, value in overrides.items() if value is not None}
     )

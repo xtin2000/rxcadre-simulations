@@ -22,6 +22,10 @@ from rxcadre_sim.s5_case import ignition_centre_utm
 
 MPH_TO_M_S = 0.44704
 WIND_WINDOW_BEFORE_S = 1800.0
+WIND_STEP_S = 60.0
+WIND_SERIES_DURATION_S = 2400.0
+# The consistent S5 anemometers agree within ±20°; the misaligned ones sit 40–71° away.
+MAX_DIRECTION_OFFSET_DEG = 30.0
 
 
 def s5_perimeter() -> list[tuple[float, float]]:
@@ -120,18 +124,76 @@ def measured_spread(sensors: pd.DataFrame) -> dict[str, float]:
     }
 
 
-def wind_during(anemometers: pd.DataFrame, start_s: float, end_s: float) -> dict[str, float]:
-    seconds = pd.to_timedelta(anemometers.time.str.strip()).dt.total_seconds()
-    window = anemometers[(seconds >= start_s) & (seconds <= end_s)]
+def _seconds(anemometers: pd.DataFrame) -> pd.Series:
+    return pd.to_timedelta(anemometers.time.str.strip()).dt.total_seconds()
+
+
+def _vector_mean_from_deg(window: pd.DataFrame) -> float:
+    """Direction of the average wind arrow (a plain average fails across north: 350° and 10°)."""
     speed = window.ws_mph * MPH_TO_M_S
     from_rad = np.radians(window.wd)
     east, north = -(speed * np.sin(from_rad)).mean(), -(speed * np.cos(from_rad)).mean()
+    return float(np.degrees(np.arctan2(-east, -north)) % 360)
+
+
+def misaligned_anemometers(anemometers: pd.DataFrame, start_s: float, end_s: float) -> list[str]:
+    """Instruments whose mean direction is more than MAX_DIRECTION_OFFSET_DEG from the group.
+
+    The RxCADRE metadata warns that some anemometers were misaligned: their direction is wrong
+    but their speed is correct. Their speeds are still used; their directions are not.
+    """
+    seconds = _seconds(anemometers)
+    window = anemometers[(seconds >= start_s) & (seconds <= end_s)]
+    directions = window.groupby("inst").apply(_vector_mean_from_deg, include_groups=False)
+    # Repeat until stable, so outliers do not drag the group direction toward each other.
+    excluded: set[str] = set()
+    while True:
+        kept = directions.drop(sorted(excluded))
+        unit = np.c_[np.sin(np.radians(kept)), np.cos(np.radians(kept))]
+        group = np.degrees(np.arctan2(*unit.mean(axis=0))) % 360
+        offset = (directions - group + 180) % 360 - 180
+        flagged = set(directions.index[offset.abs() > MAX_DIRECTION_OFFSET_DEG])
+        if flagged == excluded:
+            return sorted(excluded)
+        excluded = flagged
+
+
+def wind_during(
+    anemometers: pd.DataFrame, start_s: float, end_s: float, *, exclude_direction: list[str]
+) -> dict[str, float]:
+    seconds = _seconds(anemometers)
+    window = anemometers[(seconds >= start_s) & (seconds <= end_s)]
+    aligned = window[~window.inst.isin(exclude_direction)]
+    speed = window.ws_mph * MPH_TO_M_S
+    aligned_speed = aligned.ws_mph * MPH_TO_M_S
+    from_rad = np.radians(aligned.wd)
+    east = -(aligned_speed * np.sin(from_rad)).mean()
+    north = -(aligned_speed * np.cos(from_rad)).mean()
     return {
         "mean_speed_m_s": float(speed.mean()),
         "gust_p95_m_s": float((window.gust_mph * MPH_TO_M_S).quantile(0.95)),
-        "vector_mean_from_deg": float(np.degrees(np.arctan2(-east, -north)) % 360),
-        "steadiness": float(np.hypot(east, north) / speed.mean()),
+        "vector_mean_from_deg": _vector_mean_from_deg(aligned),
+        "steadiness": float(np.hypot(east, north) / aligned_speed.mean()),
         "samples": int(len(window)),
+        "direction_from_instruments": sorted(set(aligned.inst)),
+    }
+
+
+def wind_series(
+    anemometers: pd.DataFrame, start_s: float, duration_s: float, *, exclude_direction: list[str]
+) -> dict[str, list[float]]:
+    """Minute-by-minute wind from start_s: speed from all anemometers, direction from aligned."""
+    seconds = _seconds(anemometers)
+    window = anemometers[(seconds >= start_s) & (seconds < start_s + duration_s)].copy()
+    window["step"] = ((seconds[window.index] - start_s) // WIND_STEP_S).astype(int)
+    speed = window.groupby("step").ws_mph.mean() * MPH_TO_M_S
+    aligned = window[~window.inst.isin(exclude_direction)]
+    direction = aligned.groupby("step").apply(_vector_mean_from_deg, include_groups=False)
+    steps = speed.index.intersection(direction.index)
+    return {
+        "times_s": [float(step * WIND_STEP_S) for step in steps],
+        "speed_m_s": [round(float(speed[step]), 3) for step in steps],
+        "from_deg": [round(float(direction[step]), 1) for step in steps],
     }
 
 
@@ -146,15 +208,17 @@ def main() -> None:
     anemometers.to_csv(DERIVED_DIR / "s5_anemometers.csv", index=False)
 
     spread = measured_spread(sensors)
+    start, end = spread["ignition_estimate_utc_s"], spread["last_arrival_utc_s"]
+    misaligned = misaligned_anemometers(anemometers, start, end)
     measurements = {
         "spread": spread,
-        "wind_during_burn": wind_during(
-            anemometers, spread["ignition_estimate_utc_s"], spread["last_arrival_utc_s"]
-        ),
+        "misaligned_anemometers": misaligned,
+        "wind_during_burn": wind_during(anemometers, start, end, exclude_direction=misaligned),
         "wind_before_burn": wind_during(
-            anemometers,
-            spread["ignition_estimate_utc_s"] - WIND_WINDOW_BEFORE_S,
-            spread["ignition_estimate_utc_s"],
+            anemometers, start - WIND_WINDOW_BEFORE_S, start, exclude_direction=misaligned
+        ),
+        "wind_series_after_ignition": wind_series(
+            anemometers, start, WIND_SERIES_DURATION_S, exclude_direction=misaligned
         ),
     }
     (DERIVED_DIR / "s5_measurements.json").write_text(json.dumps(measurements, indent=2))

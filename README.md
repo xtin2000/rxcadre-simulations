@@ -12,26 +12,34 @@ project `drone_lab/wildfire_spread_prediction` (its `--fds-scenario` mode).
 ## Results
 
 **S5 calibration.** All inputs are measured except the fuel-bed depth, the least
-constrained Rothermel input, which was swept (`scripts/calibrate_s5.sh`).
+constrained Rothermel input, which was swept (`scripts/calibrate_s5.sh`). Every measured
+value is read directly from the RxCADRE files (`python -m rxcadre_sim.s5_inputs` prints each
+value with its file, row and column).
 
 | Input | Value | Source |
 |---|---|---|
 | Plot | official S5 perimeter, 19,957 m² | RDS-2014-0031 |
 | Fuel load | 0.282 kg/m² (dead fuel moisture 8.6 %) | RDS-2014-0028 |
-| Wind | 2.8 m/s from 335° (9 anemometers at 3 m, during the burn) | RDS-2016-0038 |
+| Wind | 1-minute series from the S5 anemometers (3.05 m): mean 2.8 m/s, ranging 1.3–3.8 m/s; direction mean 339°, swinging between 264° and 9° | RDS-2016-0038 |
 | Ignition | surveyed 50 m line, lit from the centre outward at 1.34 m/s | RDS-2016-0014 |
-| Fuel model | Rothermel-Albini #1 (short grass), depth calibrated to **0.37 m** | this work |
+| Fuel model | Rothermel-Albini #1 (short grass), depth calibrated to **0.42 m** | this work |
 
-| | Measured | FDS, uncalibrated (0.30 m) | FDS, calibrated (0.37 m) |
+The wind was very variable. Three of the nine anemometers (A1, A4, A5) disagree with the
+other six by 40–71° in direction, matching the RxCADRE metadata's warning about misaligned
+instruments, so their speeds are used but their directions are not. The run uses the measured
+1-minute series (as FDS `RAMP`s) rather than one average.
+
+| | Measured | Steady mean wind, depth 0.37 m | 1-minute wind, depth 0.42 m |
 |---|---|---|---|
-| Head-fire rate of spread | 0.123 m/s | 0.091 m/s | **0.120 m/s** |
-| Arrival-time RMSE at 6 sensors | — | 50 s | **34 s** |
-| Implied ignition time (UTC) | 18:05–18:07 (extrapolated) | 18:02 | **18:05** |
+| Head-fire rate of spread | 0.123 m/s | 0.120 m/s | **0.128 m/s** |
+| Arrival-time RMSE at 6 sensors | — | 34 s | **32 s** |
+| Implied ignition time (UTC) | ~18:07 (extrapolated from sensors) | 18:05 | **18:08** |
 
 Using the 3 m anemometer wind directly as mid-flame wind (`VEG_LSET_WIND_HEIGHT=3.05`)
-over-predicts spread 2.5–10×, so the FDS default wind adjustment is used. Most of
-the remaining error comes from two sensors 10 m apart that the real fire reached in
-the reverse order: fuel or gust heterogeneity that a uniform fuel bed cannot reproduce.
+over-predicts spread 2.5–10×, so the FDS default wind adjustment is used. With the 1-minute
+wind, four of the six sensors are within 12 s; the rest of the error comes from two sensors
+10 m apart that the real fire reached in the reverse order (fuel or gust heterogeneity that a
+uniform fuel bed and a spatially uniform wind cannot reproduce).
 
 **100 fictitious scenarios** (`scenarios/`) on a 400 × 400 m grid of 2 m cells
 (matching the drone simulation's `TerrainGrid`), sampled from the measured
@@ -57,7 +65,7 @@ head-fire rate of spread from 1,134 controlled runs (uniform fuel, steady wind,
 planar front) over wind 0–7.5 m/s × dead moisture 6–10 % × fuel depth 0.12–0.8 m ×
 fuel load 0.1–0.75 kg/m². It is the "true" spread-rate field in the drone
 simulation's replay mode and the target its estimator is fitted to. It reproduces
-the calibrated S5 run to within 5 % (0.126 vs 0.120 m/s). In FDS's Rothermel
+the steady-wind S5 run to within 5 % (0.126 vs 0.120 m/s). In FDS's Rothermel
 model, spread depends strongly on fuel depth (12× over the range) but barely on
 load at fixed depth (±5 %).
 
