@@ -7,6 +7,11 @@ AFB, Florida, 1 Nov 2012) and then used to generate fictitious, but physically
 grounded, fire scenarios. The scenarios serve as ground truth for the sibling
 project `drone_lab/wildfire_spread_prediction` (its `--fds-scenario` mode).
 
+The project then moved on to the **CSIRO grass fires C064 and F19** (Annaburroo, Australia,
+1986), which come with a full field record, and ran them in three simulators with the same
+measured inputs and nothing tuned: FDS level-set mode, [ELMFIRE](https://github.com/lautenberger/elmfire)
+and FDS full physics. See [CSIRO grass fires](#csiro-grass-fires-1986).
+
 ![S5 calibrated fire arrival map](docs/s5_base_arrival_map.png)
 
 ## Results
@@ -135,6 +140,57 @@ scripts/run_fds_batch.sh ros_table 14
 Each exported `scnNNN.npz` holds fire arrival time, spread velocity, fuel load,
 fuel depth and moisture per cell, plus the wind time series and the scenario spec.
 
+## CSIRO grass fires (1986)
+
+Each plot has 16 measured grass samples (load, height, grass type), the 2 m wind at its four
+corners every 5 s, a site weather station and the lighting crews' pace. One Python module per
+simulator translates these into that simulator's input files:
+
+| Module | Simulator | What it does |
+|---|---|---|
+| `annaburroo.py` | (data) | downloads CSIRO's dataset; reads the corner wind and the typed-in fuel samples (`data/derived/csiro_fuel_samples.csv`) |
+| `csiro.py` | FDS level-set mode 4 | downloads NIST's validation inputs and measured head positions; compares runs with them |
+| `csiro_fds_fast.py` | FDS level-set mode 1 | rewrites NIST's inputs for mode 1 on a 1 m grid with the field grass, wind and lighting |
+| `elmfire_csiro.py` | ELMFIRE 1.1 | writes ELMFIRE's GeoTIFF maps and `elmfire.data` for each case, runs it, reads arrival times |
+| `csiro_fds_full.py` | FDS full physics | keeps NIST's full-physics grid and physics, swaps in the 16-patch grass, field wind and lighting |
+
+Fire-head speed against CSIRO's burn table (real: C064 1.18 m/s, F19 1.85 m/s), measured
+inputs, nothing tuned:
+
+| | C064 | F19 |
+|---|---|---|
+| ELMFIRE | 24 % | 44 % |
+| FDS full physics | 88 % | 81 % |
+
+ELMFIRE must be built in `~/elmfire` (or set `ELMFIRE_DIR`), with GDAL's command-line tools on
+`PATH` or in the micromamba env `~/micromamba/envs/elmfire` (or set `GDAL_BIN_DIR`).
+
+```bash
+.venv/bin/python -m rxcadre_sim.annaburroo download      # CSIRO field data (584 MB)
+.venv/bin/python -m rxcadre_sim.csiro download           # NIST level-set inputs + measurements
+.venv/bin/python -m rxcadre_sim.csiro_fds_full download  # NIST full-physics inputs + results
+
+# FDS level-set mode 4 (NIST's files as they are)
+.venv/bin/python -m rxcadre_sim.csiro setup
+scripts/run_fds_batch.sh runs/csiro
+.venv/bin/python -m rxcadre_sim.csiro compare
+
+# ELMFIRE (seconds per case)
+.venv/bin/python -m rxcadre_sim.elmfire_csiro setup
+.venv/bin/python -m rxcadre_sim.elmfire_csiro run
+.venv/bin/python -m rxcadre_sim.elmfire_csiro compare
+
+# FDS level-set mode 1 (about 50 s per case)
+.venv/bin/python -m rxcadre_sim.csiro_fds_fast setup
+scripts/run_fds_batch.sh runs/csiro_fast 4
+.venv/bin/python -m rxcadre_sim.csiro_fds_fast compare
+
+# FDS full physics (4 to 70 min per case on 12 cores; F19 runs on the 1 m grid only)
+.venv/bin/python -m rxcadre_sim.csiro_fds_full setup
+.venv/bin/python -m rxcadre_sim.csiro_fds_full run
+.venv/bin/python -m rxcadre_sim.csiro_fds_full compare
+```
+
 ## Testing
 
 ```bash
@@ -145,10 +201,12 @@ fuel depth and moisture per cell, plus the wind time series and the scenario spe
 ## Project layout
 
 ```
-rxcadre_sim/   download, S5 data prep, S5 case/compare/map, scenario generation/export/overview
+rxcadre_sim/   download, S5 data prep, S5 case/compare/map, scenario generation/export/overview,
+               CSIRO translators for FDS and ELMFIRE
 scripts/       FDS batch runner and calibration sweep
 data/derived/  small S5 inputs and validation targets (tracked); data/raw/ is downloaded
-runs/          S5 base and calibration cases (inputs tracked, FDS outputs ignored)
+runs/          S5 base and calibration cases (inputs tracked, FDS outputs ignored);
+               CSIRO cases are written by each module's setup command
 scenarios/     100 scenario inputs + specs (FDS outputs ignored)
 docs/          figures
 ```
@@ -177,4 +235,14 @@ All RxCADRE data are public, from the USDA Forest Service Research Data Archive:
 - Jimenez, D.M.; Butler, B.W. 2016. *RxCADRE 2012: In-situ fire behavior measurements.* https://doi.org/10.2737/RDS-2016-0038
 - *RxCADRE 2012: Instrument and infrared target survey locations and attributes.* https://doi.org/10.2737/RDS-2016-0014
 - *RxCADRE 2008, 2011, and 2012: Burn blocks.* https://doi.org/10.2737/RDS-2014-0031
+CSIRO data and the papers the inputs come from:
+
+- Gould, J.S.; Cruz, M.G.; Sullivan, A.L. 2024. *1986 Annaburroo Experimental Grassland Fire Data.* CSIRO, CC BY 4.0. https://doi.org/10.25919/ycd3-w209
+- Gould, J.S.; Cruz, M.G.; Sullivan, A.L. 2024. *The 1986 Annaburroo experimental grassland fires: data.* International Journal of Wildland Fire 33, WF23100. https://doi.org/10.1071/WF23100
+- Mell, W.; Jenkins, M.A.; Gould, J.; Cheney, P. 2007. *A physics-based approach to modelling grassland fires.* International Journal of Wildland Fire 16, 1–22. https://doi.org/10.1071/WF06002
+- NIST FDS 6.11.1 validation case *CSIRO Grassland Fires*: https://github.com/firemodels/fds/tree/FDS-6.11.1/Validation/CSIRO_Grassland_Fires
+- Lautenberger, C. 2013. *Wildland fire modeling with an Eulerian level set method and automated calibration.* Fire Safety Journal 62, 289–298. https://doi.org/10.1016/j.firesaf.2013.08.014
+
+RxCADRE background:
+
 - Background: *Modeling Low Intensity Fires: Lessons Learned from 2012 RxCADRE.* Atmosphere 12(2):139, 2021. https://doi.org/10.3390/atmos12020139
