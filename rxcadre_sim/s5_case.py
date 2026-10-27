@@ -104,39 +104,55 @@ def _fuel_surf_line(surf_id: str, scenario: S5Scenario, *, extra: str = "") -> s
     return "&SURF " + ", ".join(params) + " /"
 
 
-def _plot_fuel_vents(
+def plot_cell_mask(
     perimeter: np.ndarray, cell: float, ignition_box: tuple[float, float, float, float]
-) -> list[str]:
-    """Stair-step the rotated plot polygon into one fuel VENT per same-row run of cells.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Grid edges and a [row, column] mask of cells inside the plot, ignition cells excluded.
 
-    Cells under the ignition line are skipped: FDS rejects a whole VENT that overlaps another.
+    Cells under the ignition line are left out: FDS rejects a whole VENT that overlaps another.
     """
     polygon = PolygonPath(perimeter)
     x_edges = np.arange(DOMAIN_X_M[0], DOMAIN_X_M[1] + cell / 2, cell)
     y_edges = np.arange(DOMAIN_Y_M[0], DOMAIN_Y_M[1] + cell / 2, cell)
     x_centres = (x_edges[:-1] + x_edges[1:]) / 2
+    y_centres = (y_edges[:-1] + y_edges[1:]) / 2
+    xx, yy = np.meshgrid(x_centres, y_centres)
+    mask = polygon.contains_points(np.c_[xx.ravel(), yy.ravel()]).reshape(xx.shape)
+    ign_x0, ign_x1, ign_y0, ign_y1 = ignition_box
+    mask &= ~((xx > ign_x0) & (xx < ign_x1) & (yy > ign_y0) & (yy < ign_y1))
+    return x_edges, y_edges, mask
+
+
+def row_run_vents(
+    x_edges: np.ndarray, y_edges: np.ndarray, labels: np.ndarray, surf_ids: list[str]
+) -> list[str]:
+    """One VENT per same-row run of equal labels; label -1 means no VENT (bare ground)."""
     vents = []
-    for y0, y1 in zip(y_edges[:-1], y_edges[1:], strict=True):
-        y_centre = (y0 + y1) / 2
-        is_inside = polygon.contains_points(np.c_[x_centres, np.full_like(x_centres, y_centre)])
-        ign_x0, ign_x1, ign_y0, ign_y1 = ignition_box
-        if ign_y0 < y_centre < ign_y1:
-            is_inside &= ~((x_centres > ign_x0) & (x_centres < ign_x1))
-        run_start = None
-        for index, inside in enumerate([*is_inside, False]):
-            if inside and run_start is None:
-                run_start = index
-            elif not inside and run_start is not None:
+    for row, (y0, y1) in enumerate(zip(y_edges[:-1], y_edges[1:], strict=True)):
+        run_start = 0
+        row_labels = [*labels[row], -1]
+        for index in range(1, len(row_labels)):
+            if row_labels[index] == row_labels[run_start]:
+                continue
+            if row_labels[run_start] >= 0:
                 vents.append(
                     f"&VENT XB={x_edges[run_start]:.1f},{x_edges[index]:.1f},"
                     f"{y0:.1f},{y1:.1f},0,0, "
-                    "SURF_ID='S5 grass' /"
+                    f"SURF_ID='{surf_ids[row_labels[run_start]]}' /"
                 )
-                run_start = None
+            run_start = index
     return vents
 
 
-def _ignition_box(scenario: S5Scenario) -> tuple[float, float, float, float]:
+def _plot_fuel_vents(
+    perimeter: np.ndarray, cell: float, ignition_box: tuple[float, float, float, float]
+) -> list[str]:
+    """Stair-step the rotated plot polygon into one fuel VENT per same-row run of cells."""
+    x_edges, y_edges, mask = plot_cell_mask(perimeter, cell, ignition_box)
+    return row_run_vents(x_edges, y_edges, np.where(mask, 0, -1), ["S5 grass"])
+
+
+def ignition_box(scenario: S5Scenario) -> tuple[float, float, float, float]:
     cell = scenario.cell_size_m
     centre_x, centre_y = scenario.ignition_xy_m
     half_cells = int(round(scenario.ignition_half_length_m / cell))
@@ -195,8 +211,8 @@ def _wind_lines(scenario: S5Scenario) -> list[str]:
     return lines
 
 
-def build_input(scenario: S5Scenario) -> str:
-    """Return the full FDS input text for a scenario."""
+def build_input(scenario: S5Scenario, *, fuel_lines: list[str] | None = None) -> str:
+    """Return the full FDS input text; ``fuel_lines`` replaces the one uniform grass fuel."""
     cell = scenario.cell_size_m
     nx = round((DOMAIN_X_M[1] - DOMAIN_X_M[0]) / cell)
     ny = round((DOMAIN_Y_M[1] - DOMAIN_Y_M[0]) / cell)
@@ -217,10 +233,14 @@ def build_input(scenario: S5Scenario) -> str:
         ],
         "&SURF ID='BARE', DEFAULT=T, COLOR='GRAY 60' /",
     ]
+    if fuel_lines is None:
+        fuel_lines = [
+            _fuel_surf_line("S5 grass", scenario, extra="COLOR='GREEN'"),
+            *_plot_fuel_vents(load_perimeter_local(), cell, ignition_box(scenario)),
+        ]
     body = [
         *_ignition_lines(scenario),
-        _fuel_surf_line("S5 grass", scenario, extra="COLOR='GREEN'"),
-        *_plot_fuel_vents(load_perimeter_local(), cell, _ignition_box(scenario)),
+        *fuel_lines,
         "&BNDF QUANTITY='FIRE ARRIVAL TIME' /",
         "&BNDF QUANTITY='LS SPREAD RATE' /",
         "&SLCF AGL_SLICE=0.1, QUANTITY='LEVEL SET VALUE' /",
