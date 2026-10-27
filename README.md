@@ -189,6 +189,8 @@ scripts/run_fds_batch.sh runs/csiro_fast 4
 .venv/bin/python -m rxcadre_sim.csiro_fds_full setup
 .venv/bin/python -m rxcadre_sim.csiro_fds_full run
 .venv/bin/python -m rxcadre_sim.csiro_fds_full compare
+.venv/bin/python -m rxcadre_sim.csiro_fds_full heads    # speeds vs CSIRO's burn table
+.venv/bin/python -m rxcadre_sim.csiro_fds_full maps     # arrival maps with the real outlines
 ```
 
 ## Testing

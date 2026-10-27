@@ -24,6 +24,9 @@ Commands:
   run       run every unfinished case, one after another (writes run.log in each case)
   compare   fire-head positions against the real fire (NIST's photo positions and CSIRO's own
             burn table) and NIST's runs; prints speeds, saves a chart
+  heads     fire-head speeds against CSIRO's burn table from the ground temperature slice (the
+            method behind the headline results)
+  maps      draw when the fire reached each point, with the real fire's outlines
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+import fdsreader
 import matplotlib
 
 matplotlib.use("Agg")
@@ -44,7 +48,7 @@ import pandas as pd
 
 from rxcadre_sim import annaburroo, elmfire_csiro
 from rxcadre_sim.csiro import CSIRO_RAW_DIR, head_speed
-from rxcadre_sim.csiro_fds_fast import _sample_extents, field_wind_lines
+from rxcadre_sim.csiro_fds_fast import _sample_extents, field_wind_lines, head_positions
 from rxcadre_sim.elmfire_csiro import FIRES, Conditions, CsiroFire
 from rxcadre_sim.paths import RUNS_DIR
 
@@ -60,6 +64,8 @@ FDS_ENV = Path.home() / "FDS" / "FDS6" / "bin" / "fds_env.zsh"
 # 36 meshes per fire; 12 ranks gave the best speed in the timing test (3 meshes each).
 MPI_PROCESSES = 12
 GROUND_SLICE_Z_M = 0.25
+# Gas above 300 C just over the grass means flames, not the warm plume drifting ahead of them.
+ARRIVAL_TEMPERATURE_C = 300.0
 # The block maps are drawn north up and both fires ran west, along the simulation's +x.
 PLOT_AXIS_BEARING_DEG = 270.0
 
@@ -358,6 +364,88 @@ def compare() -> None:
     print(f"Chart: {chart}")
 
 
+def first_hot_time(temperatures: np.ndarray, times_s: np.ndarray) -> np.ndarray:
+    """First time each point passed ARRIVAL_TEMPERATURE_C (time on axis 0); NaN if it never did."""
+    is_hot = temperatures > ARRIVAL_TEMPERATURE_C
+    return np.where(is_hot.any(axis=0), times_s[is_hot.argmax(axis=0)], np.nan)
+
+
+def ground_arrival(case_dir: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """x, y and the fire arrival time [y, x] from a run's ground temperature slice."""
+    ground = fdsreader.Simulation(str(case_dir)).slices.filter_by_quantity("TEMPERATURE")[0]
+    temperatures, coordinates = ground.to_global(masked=False, fill=np.nan, return_coordinates=True)
+    arrival = first_hot_time(temperatures, np.asarray(ground.times))
+    return coordinates["x"], coordinates["y"], arrival.T
+
+
+def slice_heads(
+    x: np.ndarray, y: np.ndarray, arrival: np.ndarray, times_s: np.ndarray, plot_length_m: float
+) -> np.ndarray:
+    """Furthest burned point on the plot inside NIST's head strip, at each time."""
+    on_plot = np.where((x >= 0) & (x <= plot_length_m), arrival, np.nan)
+    return head_positions(x, y, on_plot, times_s)
+
+
+def _completed_cases(fire: CsiroFire) -> list[FullCase]:
+    return [c for c in RUN_CASES if c.fire is fire and _completed(RUNS_FULL_DIR / c.name)]
+
+
+def heads() -> None:
+    """Head positions from the ground slice at CSIRO's mapped times, and speeds over them.
+
+    compare uses NIST's head detector at NIST's photo times instead; the two differ by up to
+    0.05 m/s. Use this one when comparing with CSIRO's burn table.
+    """
+    for fire in FIRES:
+        csiro = annaburroo.burn_periods(fire.name)
+        times = csiro.time_s.to_numpy()
+        real_speed = head_speed(times, csiro.distance_m.to_numpy())
+        print(
+            f"{fire.name}: real head at {_list(times, 's')}: {_list(csiro.distance_m, 'm')}, "
+            f"{real_speed:.2f} m/s"
+        )
+        for case in _completed_cases(fire):
+            x, y, arrival = ground_arrival(RUNS_FULL_DIR / case.name)
+            positions = slice_heads(x, y, arrival, times, fire.plot_length_m)
+            speed = head_speed(times, positions)
+            print(
+                f"  {case.label:50s} {_list(positions, 'm')}, {speed:.2f} m/s "
+                f"({speed / real_speed:.0%} of real)"
+            )
+
+
+def draw_maps() -> None:
+    """Arrival map of every finished run, with NIST's real fire outlines at the photo times."""
+    cases = [case for fire in FIRES for case in _completed_cases(fire)]
+    figure, axes = plt.subplots(len(cases), 1, figsize=(9, 4.5 * len(cases)), squeeze=False)
+    for ax, case in zip(axes[:, 0], cases, strict=True):
+        fire = case.fire
+        x, y, arrival = ground_arrival(RUNS_FULL_DIR / case.name)
+        image = ax.pcolormesh(
+            x, y, arrival, cmap="Blues", vmin=0, vmax=fire.end_time_s, shading="auto"
+        )
+        half, length = fire.plot_half_width_m, fire.plot_length_m
+        ax.plot([0, length, length, 0, 0], [-half, -half, half, half, -half], "k-", lw=1)
+        outlines = pd.read_csv(
+            CSIRO_RAW_DIR / "measured" / f"Case_{fire.name}_flame_position_data.csv"
+        )
+        for column in outlines.columns[::2]:
+            t = column.split()[0]
+            ax.plot(outlines[f"{t} x"], outlines[f"{t} y"], "k--", lw=1.2)
+            ax.annotate(f"real {t} s", (outlines[f"{t} x"].max(), 0), fontsize=7)
+        ax.set(
+            title=f"{fire.name}, {case.label}",
+            xlabel="x (m), wind →",
+            ylabel="y (m)",
+            aspect="equal",
+        )
+        figure.colorbar(image, ax=ax, label="Fire arrival time (s)", shrink=0.8)
+    figure.tight_layout()
+    path = RUNS_FULL_DIR / "arrival_maps.png"
+    figure.savefig(path, dpi=150)
+    print(f"Maps: {path}")
+
+
 def _list(values, unit: str) -> str:
     return "/".join(f"{v:.0f}" for v in values) + f" {unit}"
 
@@ -366,9 +454,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("command", choices=("download", "setup", "run", "compare"))
-    command = parser.parse_args().command
-    {"download": download, "setup": setup, "run": run, "compare": compare}[command]()
+    commands = {
+        "download": download,
+        "setup": setup,
+        "run": run,
+        "compare": compare,
+        "heads": heads,
+        "maps": draw_maps,
+    }
+    parser.add_argument("command", choices=commands)
+    commands[parser.parse_args().command]()
 
 
 if __name__ == "__main__":

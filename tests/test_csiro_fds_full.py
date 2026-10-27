@@ -11,8 +11,10 @@ from rxcadre_sim.csiro_fds_full import (
     FullCase,
     Grid,
     fds_direction,
+    first_hot_time,
     full_input,
     furthest_head,
+    slice_heads,
 )
 from rxcadre_sim.elmfire_csiro import FIRES
 
@@ -69,3 +71,16 @@ def test_station_direction_turns_compass_bearings_into_simulation_axes():
 def test_turning_wind_case_adds_the_direction_ramp():
     text = full_input(FullCase(F19, Grid.ONE_METRE, turns_with_station=True))
     assert "RAMP_DIRECTION_T='station direction'" in text
+
+
+def test_arrival_is_the_first_time_the_ground_gas_passes_300_degrees():
+    temperatures = np.array([[20.0, 20.0], [350.0, 20.0], [200.0, 20.0]])
+    arrival = first_hot_time(temperatures, np.array([0.0, 1.0, 2.0]))
+    assert arrival[0] == 1.0 and np.isnan(arrival[1])
+
+
+def test_slice_head_ignores_burning_off_the_plot_and_outside_the_strip():
+    x = np.array([10.0, 50.0, 110.0])
+    y = np.array([-10.0, -2.5])
+    arrival = np.array([[1.0, 1.0, 1.0], [1.0, 5.0, 1.0]])
+    assert list(slice_heads(x, y, arrival, np.array([2.0, 6.0]), 100.0)) == [10.0, 50.0]
