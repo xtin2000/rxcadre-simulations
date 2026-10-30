@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from rxcadre_sim.s5_compare import spread_rate_from_arrivals
+from rxcadre_sim.s5_fds_fast import spread_rate_from_arrivals
 from rxcadre_sim.scenario_export import spread_velocity
 
 

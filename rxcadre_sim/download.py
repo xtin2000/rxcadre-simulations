@@ -92,12 +92,10 @@ DATASETS = (
 )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--only", choices=[d.name for d in DATASETS], nargs="*")
-    args = parser.parse_args()
+def download(names: list[str] | None = None) -> None:
+    """Fetch the named datasets (all of them when ``names`` is empty) into data/raw/."""
     for dataset in DATASETS:
-        if args.only and dataset.name not in args.only:
+        if names and dataset.name not in names:
             continue
         written = extract_members(
             dataset.url,
@@ -106,6 +104,12 @@ def main() -> None:
             strip_prefix=dataset.strip_prefix,
         )
         print(f"{dataset.name}: {len(written)} files ({dataset.citation})")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--only", choices=[d.name for d in DATASETS], nargs="*")
+    download(parser.parse_args().only)
 
 
 if __name__ == "__main__":

@@ -17,9 +17,9 @@ and FDS full physics. See [CSIRO grass fires](#csiro-grass-fires-1986).
 ## Results
 
 **S5 calibration.** All inputs are measured except the fuel-bed depth, the least
-constrained Rothermel input, which was swept (`scripts/calibrate_s5.sh`). Every measured
-value is read directly from the RxCADRE files (`python -m rxcadre_sim.s5_inputs` prints each
-value with its file, row and column).
+constrained Rothermel input, which was swept (`python -m rxcadre_sim.s5_fds_fast calibrate`).
+Every measured value is read directly from the RxCADRE files
+(`python -m rxcadre_sim.s5_data inputs` prints each value with its file, row and column).
 
 | Input | Value | Source |
 |---|---|---|
@@ -104,20 +104,23 @@ python3 -m venv .venv
 ## Running the pipeline
 
 ```bash
-# 1. Download the public RxCADRE datasets (~400 MB, S5 slices only)
+# 1. Download the public RxCADRE datasets (~400 MB, S5 slices only; also the large-burn
+#    files step 6 needs). `python -m rxcadre_sim.s5_data download` fetches only what S5 needs.
 .venv/bin/python -m rxcadre_sim.download
 
 # 2. Derive S5 perimeter, sensor arrivals, wind and measured spread rate
-.venv/bin/python -m rxcadre_sim.prepare_s5
+.venv/bin/python -m rxcadre_sim.s5_data prepare
+.venv/bin/python -m rxcadre_sim.s5_data inputs     # every measured input and its source
 
-# 3. Build, run and score the calibrated S5 base case (~15 s)
-.venv/bin/python -m rxcadre_sim.s5_case --chid s5_base
-scripts/run_fds_batch.sh runs
-.venv/bin/python -m rxcadre_sim.s5_compare runs/s5_base --detail
-.venv/bin/python -m rxcadre_sim.s5_map runs/s5_base
+# 3. Build, run and score the calibrated S5 base case in FDS level-set mode 1 (~15 s)
+.venv/bin/python -m rxcadre_sim.s5_fds_fast setup
+.venv/bin/python -m rxcadre_sim.s5_fds_fast run
+.venv/bin/python -m rxcadre_sim.s5_fds_fast compare --detail
+.venv/bin/python -m rxcadre_sim.s5_fds_fast map
 
-# Optional: reproduce the calibration sweep
-scripts/calibrate_s5.sh
+# Optional: reproduce the calibration sweep, or try best-guess fuel patchworks
+.venv/bin/python -m rxcadre_sim.s5_fds_fast calibrate
+.venv/bin/python -m rxcadre_sim.s5_fds_fast patchwork --seeds 1 2 3
 
 # 4. Generate and run the fictitious scenarios (~30 min for 100 on 14 cores)
 .venv/bin/python -m rxcadre_sim.scenarios --count 100
@@ -203,9 +206,9 @@ scripts/run_fds_batch.sh runs/csiro_fast 4
 ## Project layout
 
 ```
-rxcadre_sim/   download, S5 data prep, S5 case/compare/map, scenario generation/export/overview,
-               CSIRO translators for FDS and ELMFIRE
-scripts/       FDS batch runner and calibration sweep
+rxcadre_sim/   download; S5 data (s5_data) and its FDS level-set translator (s5_fds_fast);
+               scenario generation/export/overview; CSIRO translators for FDS and ELMFIRE
+scripts/       FDS batch runner
 data/derived/  small S5 inputs and validation targets (tracked); data/raw/ is downloaded
 runs/          S5 base and calibration cases (inputs tracked, FDS outputs ignored);
                CSIRO cases are written by each module's setup command

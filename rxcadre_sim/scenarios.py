@@ -2,9 +2,9 @@
 
 Fuel, moisture and wind ranges come from the RxCADRE 2012 small-plot (S3-S9)
 measurements; the fuel-depth anchor (0.37 m) is the S5 calibration from
-s5_case.py / s5_compare.py. The landscape grid matches the
-wildfire_spread_prediction TerrainGrid: 200 x 200 cells of 2 m, origin at the
-lower-left corner, x east, y north.
+s5_fds_fast.py. The landscape grid matches the wildfire_spread_prediction
+TerrainGrid: 200 x 200 cells of 2 m, origin at the lower-left corner, x east,
+y north.
 """
 
 from __future__ import annotations

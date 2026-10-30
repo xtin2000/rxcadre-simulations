@@ -8,7 +8,7 @@ __pycache__/
 
 # Raw downloads: re-fetch with `python -m rxcadre_sim.download`
 data/raw/
-# Large derived file: rebuilt by `python -m rxcadre_sim.prepare_s5`
+# Large derived file: rebuilt by `python -m rxcadre_sim.s5_data prepare`
 data/derived/s5_anemometers.csv
 
 # FDS outputs (re-create by running the inputs); keep inputs, specs and figures
